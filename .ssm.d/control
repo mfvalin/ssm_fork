@@ -1,8 +1,10 @@
 Package: ssm
-Version: 10.15
+Version: 10.151
 Platform: all
-Maintainer: John Marshall <John.Marshall@ssc-spc.gc.ca>
+Maintainer: Michel Valin <mfvalin@gmail.com>
 Description: Simple Software Manager
  A simple software manager, not dependent upon
  the system software manager, which can take
  advantage of a repository on the network.
+ derived from Version 10.15 by
+ John Marshall <John.Marshall@ssc-spc.gc.ca>

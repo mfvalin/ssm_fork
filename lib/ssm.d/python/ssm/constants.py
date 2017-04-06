@@ -29,7 +29,7 @@
 import os.path
 import sys
 
-VERSION_STRING = "10.15"
+VERSION_STRING = "10.151"
 VERSION = tuple(VERSION_STRING.split("."))
 
 PROG_NAME = os.path.basename(sys.argv[0])
