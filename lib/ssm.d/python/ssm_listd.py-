@@ -1,0 +1,304 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# ssm_listd.py
+
+# GPL--start
+# This file is part of ssm (Simple Software Manager)
+# Copyright (C) 2005-2012 Environment/Environnement Canada
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; version 2
+# of the License.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+# GPL--end
+
+"""Provides the 'listd' subcommand.
+"""
+
+# system imports
+import glob
+import fnmatch
+import sys
+import time
+import traceback
+
+#
+from ssm.constants import *
+from ssm import globls
+from ssm import utils
+from ssm.domain import Domain
+from ssm.package import Package
+
+FIELD_FORMATTING = {
+    "_nl": ("", "%s\n"),
+    "_nl_tab": ("", "%s\n\t"),
+    "domain": ("Domain", "%-30s"),
+    "domain_owner": ("Owner", "%-10s"),
+    "domain_state": ("IDS", "%-3s"),
+    "domains": ("Domain (Install Domain)"),
+    "install_domain": ("Install Domain", "%-30s"),
+    "install_domain_owner": ("Inst Owner", "%-10s"),
+    "install_domain_state": ("IDS", "%-3s"),
+    "install_timestamp": ("Inst Timestamp", "%-16s"),
+    "name": ("Package Name", "%-30s"),
+    "name_and_publish_platform": ("Package Name", "%-30s"),
+    "publish_domain": ("Publish Domain", "%-30s"),
+    "publish_domain_owner": ("Pub Owner", "%-10s"),
+    "publish_domain_state": ("PDS", "%-3s"),
+    "publish_platform": ("Pub Platform", "%-24s"),
+    "publish_timestamp": ("Pub Timestamp", "%-16s"),
+    "state": ("State", "%-5s"),
+    "title": ("Title", "%-30s"),
+}
+
+def get_output_records(domain_home, format_fields):
+    """Produce records for a domain according to the selected
+    format_fields.
+    """
+    records = []
+    try:
+        if os.path.isdir(domain_home):
+            domain = Domain(domain_home)
+            published_platforms = domain.get_published_platforms()
+            published_packages = domain.get_packages_with_state("published")
+
+            # generate record for each package
+            for package_name in domain.get_package_names(package_name_pattern):
+                dom_package = Package(domain, package_name)
+
+                if package_name in published_packages:
+                    platforms = published_platforms
+                else:
+                    platforms = [""]
+
+                # for each publish platform
+                for publish_platform in platforms:
+                    if publish_platform != "" \
+                        and not domain.is_published(package_name, publish_platform):
+                        # must be installed or published
+                        continue
+
+                    state = domain.get_package_state(package_name, publish_platform)
+                    pub_package = published_packages.get(package_name)
+                    package = pub_package or dom_package
+
+                    publish_timestamp = pub_package and utils.get_path_timestamp(pub_package.path)
+                    timestamp = install_timestamp = utils.get_path_timestamp(package.path)
+
+                    # generate record
+                    record = []
+                    for fname in format_fields:
+                        if fname in ["title"]:
+                            # load only if necessary
+                            control_map = package and package.get_control() or {}
+
+                        if fname.startswith("_"):
+                            record.append("")
+                        elif fname in ["domain", "publish_domain"]:
+                            record.append(domain.path)
+                        elif fname in ["domain_owner", "publish_domain_owner"]:
+                            record.append(domain.get_owner())
+                        elif fname in ["domain_state", "publish_domain_state"]:
+                            record.append(domain.is_frozen() and "F" or "")
+                        elif fname == "domains":
+                            record.append("%s (%s)" % (domain.path, package.domain.path))
+                        elif fname == "install_domain":
+                            record.append(package.domain.path)
+                        elif fname == "install_domain_owner":
+                            record.append(package.domain.get_owner())
+                        elif fname == "install_domain_state":
+                            record.append(package.domain.is_frozen() and "F" or "")
+                        elif fname == "install_timestamp":
+                            record.append(install_timestamp)
+                        elif fname == "name":
+                            record.append(package_name)
+                        elif fname == "name_and_publish_platform":
+                            if not publish_platform or package_name.endswith("_"+publish_platform):
+                                record.append(package_name)
+                            else:
+                                record.append("%s (%s)" % (package_name, publish_platform))
+                        elif fname == "publish_platform":
+                            record.append(publish_platform or "")
+                        elif fname == "publish_timestamp":
+                            record.append(publish_timestamp or "")
+                        elif fname == "state":
+                            record.append(state)
+                        elif fname == "title":
+                            record.append(control_map.get("title", "***"))
+                        else:
+                            record.append("***")
+                    records.append(record)
+    except:
+        if globls.debug:
+            traceback.print_exc()
+        raise
+    return records
+
+def get_headings_and_fmt(format_fields):
+    """Produce header and fmt according to the selected
+    format_fields.
+    """
+    fmts = []
+    labels = []
+    underlines = []
+    for fname in format_fields:
+        t = FIELD_FORMATTING.get(fname)
+        if t == None:
+            t = ("?", "%1s...")
+        labels.append(t[0])
+        underlines.append("-"*len(t[0]))
+        fmts.append(t[1])
+
+    fmt = " ".join(fmts)
+    headings = "%s\n%s" % (fmt % tuple(labels), fmt % tuple(underlines))
+    return headings, fmt
+
+def print_usage():
+    print("""\
+usage: ssm listd [options]
+       ssm listd -h|--help
+
+List packages in a domain.
+
+Options:
+-d <pattern>    Path of domain to list. Wildcards (* and ?) are
+                supported. Defaults to $SSM_DOMAIN_HOME.
+-p <pattern>    Package name to match. Wildcards (* and ?) are
+                supported. Defaults to match all.
+--long          Long-format output.
+--medium        Medium-format output.
+-o <field>[...] Print selected field information (:-separated):
+                domain - domain name
+                domain_owner - username of domain owner
+                domain_state - domain state (e.g., F for frozen)
+                domains - install and publish domains
+                install_domain - install domains
+                install_domain_owner - username of domain owner
+                install_domain_state - domain state
+                install_timestamp - time of package install
+                name - package name
+                publish_domain - domain name
+                publish_domain_owner - username of domain owner
+                publish_domain_state - domain state
+                publish_timestamp - time of package publish
+                state - package state (e.g., IPp?)
+                title - package title
+
+Miscellaneous options:
+--debug         Enable debugging.""")
+
+if __name__ == "__main__":
+    try:
+        domain_home_pattern = None
+        package_name_pattern = "*"
+        output_type = "summary"
+        format_fields = None
+        sep = "|"
+
+        args = sys.argv[1:]
+        while args:
+            arg = args.pop(0)
+            if arg in ["-h", "--help"]:
+                print_usage()
+                sys.exit(0)
+
+            elif arg in ["-d", "--domainHome"] and args:
+                domain_home_pattern = args.pop(0)
+            elif arg in ["--long"]:
+                output_type = "long"
+            elif arg in ["--medium"]:
+                output_type = "medium"
+            elif arg == "-o" and args:
+                output_type = "format"
+                format_fields = args.pop(0).split(",")
+            elif arg == "-O" and args:
+                output_type = "format_with_headings"
+                format_fields = args.pop(0).split(",")
+            elif arg in ["-p", "--packageName"] and args:
+                package_name_pattern = args.pop(0)
+
+            elif arg in ["--debug"]:
+                globls.debug = True
+            else:
+                raise Exception()
+    except SystemExit:
+        raise
+    except:
+        if globls.debug:
+            traceback.print_exc()
+        utils.print_exit("error: bad/missing argument(s)")
+
+    if domain_home_pattern == None:
+        domain_homes = [Domain().path]
+    else:
+        domain_homes = sorted(glob.glob(domain_home_pattern))
+
+    if output_type == "format":
+        headings = None
+        fmt = "%s"
+    else:
+        if output_type == "format_with_headings":
+            pass
+        elif output_type == "long":
+            format_fields = ["state", "install_timestamp", "publish_platform", "name",
+                "title", "domain_state", "domain", "install_domain_state", "install_domain"]
+        elif output_type == "medium":
+            format_fields = ["state", "install_timestamp", "publish_platform", "name",
+                "title", "domain_state", "domain"]
+        else:
+            # summary
+            format_fields = ["state", "name_and_publish_platform"]
+        headings, fmt = get_headings_and_fmt(format_fields)
+
+    for i, domain_home in enumerate(domain_homes):
+        try:
+            domain = Domain(domain_home)
+            if not domain.is_compatible():
+                utils.print_error(MSG_INCOMPATIBLE_DOMAIN)
+                continue
+
+            subdomains = domain.get_subdomains()
+        except:
+            print("warning: not a domain (%s)" % domain_home)
+            continue
+
+        if i:
+            # aesthetic
+            print
+
+        if output_type in ["long", "medium"] and headings:
+            print(headings)
+        for domain_home in subdomains+[domain_home]:
+            try:
+                lines = []
+                for record in get_output_records(domain_home, format_fields):
+                    if output_type == "format":
+                        lines.append(fmt % sep.join(record))
+                    else:
+                        lines.append(fmt % tuple(record))
+                if output_type == "summary":
+                    print "==========  %s (%s)  ==========" % (domain_home, domain.get_label())
+                    utils.print_columns(lines, None, utils.get_terminal_size()[1])
+                else:
+                    for line in lines:
+                        print(line)
+            except SystemExit:
+                raise
+            except utils.SSMExitException, detail:
+                utils.print_exit(detail)
+            except:
+                if globls.debug:
+                    traceback.print_exc()
+                # TODO: this does not seem to be a good error
+                utils.print_exit("error: could not access domain information")
+    sys.exit(0)

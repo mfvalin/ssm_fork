@@ -1,0 +1,36 @@
+#! /bin/sh
+#
+# post-install <domainHome> <packageHome>
+
+domainHome=$1; shift 1
+packageHome=$1; shift 1
+libPath="${packageHome}/lib/ssm.d"
+
+if [ -d ${libPath} ]; then
+    # clean out compiled (.pyc) files
+    rm -f ${libPath}/*.pyc
+fi
+
+# compile files
+st="import compileall
+compileall.compile_dir(\"${libPath}\", force=1)"
+echo "${st}" | python -
+
+# create profiles
+packageName=`basename ${packageHome}`
+shortPackageName=${packageName%%_*}
+profileDirPath=${packageHome}/etc/profile.d
+profilePath=${profileDirPath}/${packageName}.sh
+loginPath=${profileDirPath}/${packageName}.csh
+
+# expect default to point to the real SGE cell dir
+rm -f ${profilePath} ${loginPath}
+mkdir -p ${profileDirPath}
+
+cat > "${profilePath}" <<EOF
+export SSM_DOMAIN_HOME="$domainHome"
+EOF
+
+cat > "${loginPath}" <<EOF
+setenv SSM_DOMAIN_HOME "$domainHome"
+EOF
