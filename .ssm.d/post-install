@@ -29,8 +29,10 @@ mkdir -p ${profileDirPath}
 
 cat > "${profilePath}" <<EOF
 export SSM_DOMAIN_HOME="$domainHome"
+export SSM_SYSTEM_DOMAIN_HOME="$domainHome"
 EOF
 
 cat > "${loginPath}" <<EOF
 setenv SSM_DOMAIN_HOME "$domainHome"
+setenv SSM_SYSTEM_DOMAIN_HOME "$domainHome"
 EOF
