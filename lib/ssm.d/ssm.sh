@@ -96,8 +96,7 @@ listdh)
 listr)
 	exec ${LIB_DIR}/python/ssm_listr.py "$@" ;;
 platforms)
-	# use domain lib/ssm.d
-	exec "${LIB_DIR}/../../../lib/ssm.d/ssm_platforms.sh" "$@" ;;
+	ssmuse_platforms ;;
 publish)
 	exec ${LIB_DIR}/python/ssm_publish.py "$@" ;;
 showd)
