@@ -100,7 +100,10 @@ def get_terminal_size():
     import termios
     import struct
 
-    nrows, ncols, pixrows, pixcols = struct.unpack("HHHH", fcntl.ioctl(0, termios.TIOCGWINSZ, struct.pack("HHHH", 0, 0, 0, 0)))
+    try:
+      nrows, ncols, pixrows, pixcols = struct.unpack("HHHH", fcntl.ioctl(0, termios.TIOCGWINSZ, struct.pack("HHHH", 0, 0, 0, 0)))
+    except IOError:  # Not a terminal?  Use some sensible default.
+      nrows, ncols = 24, 80
     return nrows, ncols
 
 def groupname(gid=None):
